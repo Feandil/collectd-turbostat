@@ -155,6 +155,7 @@ struct pkg_data {
 #define EVEN_COUNTERS thread_even, core_even, package_even
 static bool is_even = true;
 
+static bool allocated = false;
 static bool initialized = false;
 
 #define GET_THREAD(thread_base, thread_no, core_no, pkg_no) \
@@ -176,7 +177,47 @@ struct topo_params {
 
 struct timeval tv_even, tv_odd, tv_delta;
 
-static void setup_all_buffers(void);
+enum return_values {
+	ERR_CPU_MIGRATE = -1,
+	ERR_MSR_IA32_APERF = -2,
+	ERR_MSR_IA32_MPERF = -3,
+	ERR_MSR_SMI_COUNT = -4,
+	ERR_MSR_CORE_C3_RESIDENCY = -5,
+	ERR_MSR_CORE_C6_RESIDENCY = -6,
+	ERR_MSR_CORE_C7_RESIDENCY = -7,
+	ERR_MSR_IA32_THERM_STATUS = -8,
+	ERR_MSR_PKG_C3_RESIDENCY = -9,
+	ERR_MSR_PKG_C6_RESIDENCY = -10,
+	ERR_MSR_PKG_C2_RESIDENCY = -11,
+	ERR_MSR_PKG_C7_RESIDENCY = -12,
+	ERR_MSR_PKG_C8_RESIDENCY = -13,
+	ERR_MSR_PKG_C9_RESIDENCY = -14,
+	ERR_MSR_PKG_C10_RESIDENCY = -15,
+	ERR_MSR_PKG_ENERGY_STATUS = -16,
+	ERR_MSR_PP0_ENERGY_STATUS = -17,
+	ERR_MSR_DRAM_ENERGY_STATUS = -18,
+	ERR_MSR_PP1_ENERGY_STATUS = -19,
+	ERR_MSR_PKG_PERF_STATUS = -20,
+	ERR_MSR_DRAM_PERF_STATUS = -21,
+	ERR_MSR_IA32_PACKAGE_THERM_STATUS = -22,
+	ERR_CPU_NOT_PRESENT = -23,
+	ERR_NO_MSR = -24,
+	ERR_CANT_OPEN_FILE = -25,
+	ERR_CANT_READ_NUMBER = -26,
+	ERR_CANT_READ_PROC_STAT = -27,
+	ERR_NO_INVARIANT_TSC = -28,
+	ERR_NO_APERF = -29,
+	ERR_CALLOC = -30,
+	ERR_CPU_ALLOC = -31,
+	ERR_NOT_ROOT = -32,
+};
+
+#define STATIC_MUST_CHECK(function)          \
+function                                     \
+	__attribute__((warn_unused_result)); \
+function
+
+static int setup_all_buffers(void);
 
 static int cpu_is_not_present(int cpu)
 {
@@ -187,8 +228,8 @@ static int cpu_is_not_present(int cpu)
  * skip non-present cpus
  */
 
-static int for_all_cpus(int (func)(struct thread_data *, struct core_data *, struct pkg_data *),
-	struct thread_data *thread_base, struct core_data *core_base, struct pkg_data *pkg_base)
+STATIC_MUST_CHECK(static int for_all_cpus(int (func)(struct thread_data *, struct core_data *, struct pkg_data *),
+	struct thread_data *thread_base, struct core_data *core_base, struct pkg_data *pkg_base))
 {
 	int retval, pkg_no, core_no, thread_no;
 
@@ -217,17 +258,17 @@ static int for_all_cpus(int (func)(struct thread_data *, struct core_data *, str
 	return 0;
 }
 
-static int cpu_migrate(int cpu)
+STATIC_MUST_CHECK(static int cpu_migrate(int cpu))
 {
 	CPU_ZERO_S(cpu_affinity_setsize, cpu_affinity_set);
 	CPU_SET_S(cpu, cpu_affinity_setsize, cpu_affinity_set);
 	if (sched_setaffinity(0, cpu_affinity_setsize, cpu_affinity_set) == -1)
-		return -1;
+		return ERR_CPU_MIGRATE;
 	else
 		return 0;
 }
 
-static int get_msr(int cpu, off_t offset, unsigned long long *msr)
+STATIC_MUST_CHECK(static int get_msr(int cpu, off_t offset, unsigned long long *msr))
 {
 	ssize_t retval;
 	char pathname[32];
@@ -288,9 +329,9 @@ delta_core(struct core_data *new, struct core_data *old)
 /*
  * old = new - old
  */
-static void
+STATIC_MUST_CHECK(static int
 delta_thread(struct thread_data *new, struct thread_data *old,
-	struct core_data *core_delta)
+	struct core_data *core_delta))
 {
 	old->tsc = new->tsc - old->tsc;
 
@@ -298,8 +339,8 @@ delta_thread(struct thread_data *new, struct thread_data *old,
 	if (old->tsc < (1000 * 1000)) {
 		WARNING("Insanely slow TSC rate, TSC stops in idle?\n"
 			"You can disable all c-states by booting with \"idle=poll\"\n"
-		"or just the deep ones with \"processor.max_cstate=1\"");
-		exit(-1);
+			"or just the deep ones with \"processor.max_cstate=1\"");
+		return -1;
 	}
 
 	old->c1 = new->c1 - old->c1;
@@ -339,24 +380,30 @@ delta_thread(struct thread_data *new, struct thread_data *old,
 	}
 
 	if (old->mperf == 0) {
-//		if (verbose > 1) fprintf(stderr, "cpu%d MPERF 0!\n", old->cpu_id);
+		WARNING("cpu%d MPERF 0!\n", old->cpu_id);
 		old->mperf = 1;	/* divide by 0 protection */
 	}
 
 	if (do_smi)
 		old->smi_count = new->smi_count - old->smi_count;
+
+	return 0;
 }
 
-static int delta_cpu(struct thread_data *t, struct core_data *c,
+STATIC_MUST_CHECK(static int delta_cpu(struct thread_data *t, struct core_data *c,
 	struct pkg_data *p, struct thread_data *t2,
-	struct core_data *c2, struct pkg_data *p2)
+	struct core_data *c2, struct pkg_data *p2))
 {
+	int ret;
+
 	/* calculate core delta only for 1st thread in core */
 	if (t->flags & CPU_IS_FIRST_THREAD_IN_CORE)
 		delta_core(c, c2);
 
 	/* always calculate thread delta */
-	delta_thread(t, t2, c2);	/* c2 is core delta */
+	ret = delta_thread(t, t2, c2);	/* c2 is core delta */
+	if (ret != 0)
+		return ret;
 
 	/* calculate package delta only for 1st core in package */
 	if (t->flags & CPU_IS_FIRST_CORE_IN_PACKAGE)
@@ -380,28 +427,28 @@ static unsigned long long rdtsc(void)
  * migrate to cpu
  * acquire and record local counters for that cpu
  */
-static int get_counters(struct thread_data *t, struct core_data *c, struct pkg_data *p)
+STATIC_MUST_CHECK(static int get_counters(struct thread_data *t, struct core_data *c, struct pkg_data *p))
 {
 	int cpu = t->cpu_id;
 	unsigned long long msr;
 
 	if (cpu_migrate(cpu)) {
 		WARNING("Could not migrate to CPU %d\n", cpu);
-		return -1;
+		return ERR_CPU_MIGRATE;
 	}
 
 	t->tsc = rdtsc();	/* we are running on local CPU of interest */
 
 	if (has_aperf) {
 		if (get_msr(cpu, MSR_IA32_APERF, &t->aperf))
-			return -3;
+			return ERR_MSR_IA32_APERF;
 		if (get_msr(cpu, MSR_IA32_MPERF, &t->mperf))
-			return -4;
+			return ERR_MSR_IA32_MPERF;
 	}
 
 	if (do_smi) {
 		if (get_msr(cpu, MSR_SMI_COUNT, &msr))
-			return -5;
+			return ERR_MSR_SMI_COUNT;
 		t->smi_count = msr & 0xFFFFFFFF;
 	}
 
@@ -411,21 +458,21 @@ static int get_counters(struct thread_data *t, struct core_data *c, struct pkg_d
 
 	if (do_nhm_cstates && !do_slm_cstates) {
 		if (get_msr(cpu, MSR_CORE_C3_RESIDENCY, &c->c3))
-			return -6;
+			return ERR_MSR_CORE_C3_RESIDENCY;
 	}
 
 	if (do_nhm_cstates) {
 		if (get_msr(cpu, MSR_CORE_C6_RESIDENCY, &c->c6))
-			return -7;
+			return ERR_MSR_CORE_C6_RESIDENCY;
 	}
 
 	if (do_snb_cstates)
 		if (get_msr(cpu, MSR_CORE_C7_RESIDENCY, &c->c7))
-			return -8;
+			return ERR_MSR_CORE_C7_RESIDENCY;
 
 	if (do_dts) {
 		if (get_msr(cpu, MSR_IA32_THERM_STATUS, &msr))
-			return -9;
+			return ERR_MSR_IA32_THERM_STATUS;
 		c->core_temp_c = tcc_activation_temp - ((msr >> 16) & 0x7F);
 	}
 
@@ -436,57 +483,57 @@ static int get_counters(struct thread_data *t, struct core_data *c, struct pkg_d
 
 	if (do_nhm_cstates && !do_slm_cstates) {
 		if (get_msr(cpu, MSR_PKG_C3_RESIDENCY, &p->pc3))
-			return -9;
+			return ERR_MSR_PKG_C3_RESIDENCY;
 		if (get_msr(cpu, MSR_PKG_C6_RESIDENCY, &p->pc6))
-			return -10;
+			return ERR_MSR_PKG_C6_RESIDENCY;
 	}
 	if (do_snb_cstates) {
 		if (get_msr(cpu, MSR_PKG_C2_RESIDENCY, &p->pc2))
-			return -11;
+			return ERR_MSR_PKG_C2_RESIDENCY;
 		if (get_msr(cpu, MSR_PKG_C7_RESIDENCY, &p->pc7))
-			return -12;
+			return ERR_MSR_PKG_C7_RESIDENCY;
 	}
 	if (do_c8_c9_c10) {
 		if (get_msr(cpu, MSR_PKG_C8_RESIDENCY, &p->pc8))
-			return -13;
+			return ERR_MSR_PKG_C8_RESIDENCY;
 		if (get_msr(cpu, MSR_PKG_C9_RESIDENCY, &p->pc9))
-			return -13;
+			return ERR_MSR_PKG_C9_RESIDENCY;
 		if (get_msr(cpu, MSR_PKG_C10_RESIDENCY, &p->pc10))
-			return -13;
+			return ERR_MSR_PKG_C10_RESIDENCY;
 	}
 	if (do_rapl & RAPL_PKG) {
 		if (get_msr(cpu, MSR_PKG_ENERGY_STATUS, &msr))
-			return -13;
+			return ERR_MSR_PKG_ENERGY_STATUS;
 		p->energy_pkg = msr & 0xFFFFFFFF;
 	}
 	if (do_rapl & RAPL_CORES) {
 		if (get_msr(cpu, MSR_PP0_ENERGY_STATUS, &msr))
-			return -14;
+			return MSR_PP0_ENERGY_STATUS;
 		p->energy_cores = msr & 0xFFFFFFFF;
 	}
 	if (do_rapl & RAPL_DRAM) {
 		if (get_msr(cpu, MSR_DRAM_ENERGY_STATUS, &msr))
-			return -15;
+			return ERR_MSR_DRAM_ENERGY_STATUS;
 		p->energy_dram = msr & 0xFFFFFFFF;
 	}
 	if (do_rapl & RAPL_GFX) {
 		if (get_msr(cpu, MSR_PP1_ENERGY_STATUS, &msr))
-			return -16;
+			return ERR_MSR_PP1_ENERGY_STATUS;
 		p->energy_gfx = msr & 0xFFFFFFFF;
 	}
 	if (do_rapl & RAPL_PKG_PERF_STATUS) {
 		if (get_msr(cpu, MSR_PKG_PERF_STATUS, &msr))
-			return -16;
+			return ERR_MSR_PKG_PERF_STATUS;
 		p->rapl_pkg_perf_status = msr & 0xFFFFFFFF;
 	}
 	if (do_rapl & RAPL_DRAM_PERF_STATUS) {
 		if (get_msr(cpu, MSR_DRAM_PERF_STATUS, &msr))
-			return -16;
+			return ERR_MSR_DRAM_PERF_STATUS;
 		p->rapl_dram_perf_status = msr & 0xFFFFFFFF;
 	}
 	if (do_ptm) {
 		if (get_msr(cpu, MSR_IA32_PACKAGE_THERM_STATUS, &msr))
-			return -17;
+			return ERR_MSR_IA32_PACKAGE_THERM_STATUS;
 		p->pkg_temp_c = tcc_activation_temp - ((msr >> 16) & 0x7F);
 	}
 	return 0;
@@ -494,6 +541,9 @@ static int get_counters(struct thread_data *t, struct core_data *c, struct pkg_d
 
 static void free_all_buffers(void)
 {
+	allocated = false;
+	initialized = false;
+
 	CPU_FREE(cpu_present_set);
 	cpu_present_set = NULL;
 	cpu_present_set = 0;
@@ -520,17 +570,6 @@ static void free_all_buffers(void)
 }
 
 /*
- * Open a file, and exit on failure
- */
-static FILE *fopen_or_die(const char *path, const char *mode)
-{
-	FILE *filep = fopen(path, "r");
-	if (!filep)
-		err(1, "%s: open failed", path);
-	return filep;
-}
-
-/*
  * Parse a file containing a single int.
  */
 static int parse_int_file(const char *fmt, ...)
@@ -543,10 +582,14 @@ static int parse_int_file(const char *fmt, ...)
 	va_start(args, fmt);
 	vsnprintf(path, sizeof(path), fmt, args);
 	va_end(args);
-	filep = fopen_or_die(path, "r");
+	filep = fopen(path, "r");
+	if (!filep) {
+		ERROR("%s: open failed", path);
+		return ERR_CANT_OPEN_FILE;
+	}
 	if (fscanf(filep, "%d", &value) != 1) {
 		ERROR("%s: failed to parse number from file", path);
-		return -1;
+		return ERR_CANT_READ_NUMBER;
 	}
 	fclose(filep);
 	return value;
@@ -589,7 +632,11 @@ static int get_num_ht_siblings(int cpu)
 	char character;
 
 	sprintf(path, "/sys/devices/system/cpu/cpu%d/topology/thread_siblings_list", cpu);
-	filep = fopen_or_die(path, "r");
+	filep = fopen(path, "r");
+        if (!filep) {
+                ERROR("%s: open failed", path);
+                return ERR_CANT_OPEN_FILE;
+        }
 	/*
 	 * file format:
 	 * if a pair of number with a character between: 2 siblings (eg. 1-2, or 1,4)
@@ -610,12 +657,13 @@ static int get_num_ht_siblings(int cpu)
  * skip non-present cpus
  */
 
+STATIC_MUST_CHECK(
 static int for_all_cpus_2(int (func)(struct thread_data *, struct core_data *,
 	struct pkg_data *, struct thread_data *, struct core_data *,
 	struct pkg_data *), struct thread_data *thread_base,
 	struct core_data *core_base, struct pkg_data *pkg_base,
 	struct thread_data *thread_base2, struct core_data *core_base2,
-	struct pkg_data *pkg_base2)
+	struct pkg_data *pkg_base2))
 {
 	int retval, pkg_no, core_no, thread_no;
 
@@ -653,17 +701,23 @@ static int for_all_cpus_2(int (func)(struct thread_data *, struct core_data *,
  * run func(cpu) on every cpu in /proc/stat
  * return max_cpu number
  */
-static int for_all_proc_cpus(int (func)(int))
+STATIC_MUST_CHECK(static int for_all_proc_cpus(int (func)(int)))
 {
 	FILE *fp;
 	int cpu_num;
 	int retval;
 
-	fp = fopen_or_die(proc_stat, "r");
+	fp = fopen(proc_stat, "r");
+        if (!fp) {
+                ERROR("%s: open failed", proc_stat);
+                return ERR_CANT_OPEN_FILE;
+        }
 
 	retval = fscanf(fp, "cpu %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d\n");
-	if (retval != 0)
-		err(1, "%s: failed to parse format", proc_stat);
+	if (retval != 0) {
+		ERROR("%s: failed to parse format", proc_stat);
+		return ERR_CANT_READ_PROC_STAT;
+	}
 
 	while (1) {
 		retval = fscanf(fp, "cpu%u %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d\n", &cpu_num);
@@ -679,15 +733,6 @@ static int for_all_proc_cpus(int (func)(int))
 	fclose(fp);
 	return 0;
 }
-
-static void re_initialize(void)
-{
-	free_all_buffers();
-	setup_all_buffers();
-	initialized = false;
-	WARNING("turbostat: re-initialized with num_cpus %d\n", topo.num_cpus);
-}
-
 
 /*
  * count_cpus()
@@ -826,15 +871,24 @@ done:
 
 static int turbostat_read (user_data_t * not_used)
 {
-	if (for_all_proc_cpus(cpu_is_not_present)) {
-		re_initialize();
-		if (for_all_proc_cpus(cpu_is_not_present))
-			return -1;
+	int ret;
+
+	if (!allocated) {
+		if ((ret = setup_all_buffers()) < 0)
+			return ret;
 	}
 
-	if (! initialized) {
-		if (for_all_cpus(get_counters, EVEN_COUNTERS) < 0)
-			return -1;
+	if (for_all_proc_cpus(cpu_is_not_present)) {
+		free_all_buffers();
+		if ((ret = setup_all_buffers()) < 0)
+			return ret;
+		if (for_all_proc_cpus(cpu_is_not_present))
+			return ERR_CPU_NOT_PRESENT;
+	}
+
+	if (!initialized) {
+		if ((ret = for_all_cpus(get_counters, EVEN_COUNTERS)) < 0)
+			return ret;
 		gettimeofday(&tv_even, (struct timezone *)NULL);
 		is_even = true;
 		initialized = true;
@@ -842,42 +896,48 @@ static int turbostat_read (user_data_t * not_used)
 	}
 
 	if (is_even) {
-		if (for_all_cpus(get_counters, ODD_COUNTERS))
-			return -1;
+		if ((ret = for_all_cpus(get_counters, ODD_COUNTERS)) < 0)
+			return ret;
 		gettimeofday(&tv_odd, (struct timezone *)NULL);
 		is_even = false;
 		timersub(&tv_odd, &tv_even, &tv_delta);
-		for_all_cpus_2(delta_cpu, ODD_COUNTERS, EVEN_COUNTERS);
-		for_all_cpus(submit_counters, EVEN_COUNTERS);
+		if ((ret = for_all_cpus_2(delta_cpu, ODD_COUNTERS, EVEN_COUNTERS)) < 0)
+			return ret;
+		if ((ret = for_all_cpus(submit_counters, EVEN_COUNTERS)) < 0)
+			return ret;
 	} else {
-		if (for_all_cpus(get_counters, EVEN_COUNTERS))
-			return -1;
+		if ((ret = for_all_cpus(get_counters, EVEN_COUNTERS)) < 0)
+			return ret;
 		gettimeofday(&tv_even, (struct timezone *)NULL);
 		is_even = true;
 		timersub(&tv_even, &tv_odd, &tv_delta);
-		for_all_cpus_2(delta_cpu, EVEN_COUNTERS, ODD_COUNTERS);
-		for_all_cpus(submit_counters, ODD_COUNTERS);
+		if ((ret = for_all_cpus_2(delta_cpu, EVEN_COUNTERS, ODD_COUNTERS)) < 0)
+			return ret;
+		if ((ret = for_all_cpus(submit_counters, ODD_COUNTERS)) < 0)
+			return ret;
 	}
 	return 0;
 }
 
-static void check_dev_msr()
+STATIC_MUST_CHECK(static int check_dev_msr())
 {
 	struct stat sb;
 
 	if (stat("/dev/cpu/0/msr", &sb)) {
 		ERROR("no /dev/cpu/0/msr\n"
 			"Try \"# modprobe msr\"");
-		exit(-5);
+		return ERR_NO_MSR;
 	}
+	return 0;
 }
 
-static void check_super_user()
+STATIC_MUST_CHECK(static int check_super_user())
 {
 	if (getuid() != 0) {
 		ERROR("must be root");
-		exit(-6);
+		return ERR_NOT_ROOT;
 	}
+	return 0;
 }
 
 
@@ -1023,7 +1083,7 @@ static int is_slm(unsigned int family, unsigned int model)
  * below this value, including the Digital Thermal Sensor (DTS),
  * Package Thermal Management Sensor (PTM), and thermal event thresholds.
  */
-static int set_temperature_target(struct thread_data *t, struct core_data *c, struct pkg_data *p)
+STATIC_MUST_CHECK(static int set_temperature_target(struct thread_data *t, struct core_data *c, struct pkg_data *p))
 {
 	unsigned long long msr;
 	unsigned int target_c_local;
@@ -1040,7 +1100,7 @@ static int set_temperature_target(struct thread_data *t, struct core_data *c, st
 	cpu = t->cpu_id;
 	if (cpu_migrate(cpu)) {
 		ERROR("Could not migrate to CPU %d\n", cpu);
-		return -1;
+		return ERR_CPU_MIGRATE;
 	}
 
 	if (tcc_activation_temp_override != 0) {
@@ -1073,7 +1133,8 @@ guess:
 
 	return 0;
 }
-static void check_cpuid()
+
+STATIC_MUST_CHECK(static int check_cpuid())
 {
 	unsigned int eax, ebx, ecx, edx, max_level;
 	unsigned int fms, family, model;
@@ -1093,7 +1154,7 @@ static void check_cpuid()
 
 	if (!(edx & (1 << 5))) {
 		ERROR("CPUID: no MSR");
-		errx(1, "CPUID: no MSR");
+		return ERR_NO_MSR;
 	}
 
 	/*
@@ -1106,7 +1167,7 @@ static void check_cpuid()
 
 	if (max_level < 0x80000007) {
 		ERROR("CPUID: no invariant TSC (max_level 0x%x)", max_level);
-		errx(1, "CPUID: no invariant TSC (max_level 0x%x)", max_level);
+		return ERR_NO_INVARIANT_TSC;
 	}
 
 	/*
@@ -1118,7 +1179,7 @@ static void check_cpuid()
 
 	if (!has_invariant_tsc) {
 		ERROR("No invariant TSC");
-		errx(1, "No invariant TSC");
+		return ERR_NO_INVARIANT_TSC;
 	}
 
 	/*
@@ -1134,7 +1195,7 @@ static void check_cpuid()
 
 	if (!has_aperf) {
 		ERROR("No APERF");
-		errx(-1, "No APERF");
+		return ERR_NO_APERF;
 	}
 
 	do_nehalem_platform_info = genuine_intel && has_invariant_tsc;
@@ -1146,14 +1207,15 @@ static void check_cpuid()
 
 	rapl_probe(family, model);
 
-	return;
+	return 0;
 }
 
 
 
-static void topology_probe()
+STATIC_MUST_CHECK(static int topology_probe())
 {
 	int i;
+	int ret;
 	int max_core_id = 0;
 	int max_package_id = 0;
 	int max_siblings = 0;
@@ -1165,7 +1227,9 @@ static void topology_probe()
 	/* Initialize num_cpus, max_cpu_num */
 	topo.num_cpus = 0;
 	topo.max_cpu_num = 0;
-	for_all_proc_cpus(count_cpus);
+	ret = for_all_proc_cpus(count_cpus);
+	if (ret < 0)
+		return ret;
 	if (topo.num_cpus > 1)
 		show_cpu = 1;
 
@@ -1174,7 +1238,7 @@ static void topology_probe()
 	cpus = calloc(1, (topo.max_cpu_num  + 1) * sizeof(struct cpu_topology));
 	if (cpus == NULL) {
 		ERROR("calloc cpus");
-		err(1, "calloc cpus");
+		return ERR_CALLOC;
 	}
 
 	/*
@@ -1182,20 +1246,26 @@ static void topology_probe()
 	 */
 	cpu_present_set = CPU_ALLOC((topo.max_cpu_num + 1));
 	if (cpu_present_set == NULL) {
+		free(cpus);
 		ERROR("CPU_ALLOC");
-		err(3, "CPU_ALLOC");
+		return ERR_CPU_ALLOC;
 	}
 	cpu_present_setsize = CPU_ALLOC_SIZE((topo.max_cpu_num + 1));
 	CPU_ZERO_S(cpu_present_setsize, cpu_present_set);
-	for_all_proc_cpus(mark_cpu_present);
+	ret = for_all_proc_cpus(mark_cpu_present);
+	if (ret < 0) {
+		free(cpus);
+		return ret;
+	}
 
 	/*
 	 * Allocate and initialize cpu_affinity_set
 	 */
 	cpu_affinity_set = CPU_ALLOC((topo.max_cpu_num + 1));
 	if (cpu_affinity_set == NULL) {
+		free(cpus);
 		ERROR("CPU_ALLOC");
-		err(3, "CPU_ALLOC");
+		return ERR_CPU_ALLOC;
 	}
 	cpu_affinity_setsize = CPU_ALLOC_SIZE((topo.max_cpu_num + 1));
 	CPU_ZERO_S(cpu_affinity_setsize, cpu_affinity_set);
@@ -1214,14 +1284,20 @@ static void topology_probe()
 			continue;
 		}
 		cpus[i].core_id = get_core_id(i);
+		if (cpus[i].core_id < 0)
+			return cpus[i].core_id;
 		if (cpus[i].core_id > max_core_id)
 			max_core_id = cpus[i].core_id;
 
 		cpus[i].physical_package_id = get_physical_package_id(i);
+		if (cpus[i].physical_package_id < 0)
+			return cpus[i].physical_package_id;
 		if (cpus[i].physical_package_id > max_package_id)
 			max_package_id = cpus[i].physical_package_id;
 
 		siblings = get_num_ht_siblings(i);
+		if (siblings < 0)
+			return siblings;
 		if (siblings > max_siblings)
 			max_siblings = siblings;
 		DEBUG("cpu %d pkg %d core %d\n",
@@ -1243,9 +1319,10 @@ static void topology_probe()
 	DEBUG("max_siblings %d\n", max_siblings);
 
 	free(cpus);
+	return 0;
 }
 
-static void
+static int
 allocate_counters(struct thread_data **t, struct core_data **c, struct pkg_data **p)
 {
 	int i;
@@ -1274,10 +1351,10 @@ allocate_counters(struct thread_data **t, struct core_data **c, struct pkg_data 
 	for (i = 0; i < topo.num_packages; i++)
 		(*p)[i].package_id = i;
 
-	return;
+	return 0;
 error:
 	ERROR("calloc counters");
-	err(1, "calloc counters");
+	return ERR_CALLOC;
 }
 /*
  * init_counter()
@@ -1287,10 +1364,11 @@ error:
  *
  * increment topo.num_cores when 1st core in pkg seen
  */
-static void init_counter(struct thread_data *thread_base, struct core_data *core_base,
+static int init_counter(struct thread_data *thread_base, struct core_data *core_base,
 	struct pkg_data *pkg_base, int thread_num, int core_num,
 	int pkg_num, int cpu_id)
 {
+	int ret;
 	struct thread_data *t;
 	struct core_data *c;
 	struct pkg_data *p;
@@ -1302,54 +1380,83 @@ static void init_counter(struct thread_data *thread_base, struct core_data *core
 	t->cpu_id = cpu_id;
 	if (thread_num == 0) {
 		t->flags |= CPU_IS_FIRST_THREAD_IN_CORE;
-		if (cpu_is_first_core_in_package(cpu_id))
+		if ((ret = cpu_is_first_core_in_package(cpu_id)) < 0) {
+			return ret;
+		} else if (ret != 0) {
 			t->flags |= CPU_IS_FIRST_CORE_IN_PACKAGE;
+		}
 	}
 
 	c->core_id = core_num;
 	p->package_id = pkg_num;
+
+	return 0;
 }
 
 
 static int initialize_counters(int cpu_id)
 {
 	int my_thread_id, my_core_id, my_package_id;
+	int ret;
 
 	my_package_id = get_physical_package_id(cpu_id);
+	if (my_package_id < 0)
+		return my_package_id;
 	my_core_id = get_core_id(cpu_id);
+	if (my_core_id < 0)
+		return my_core_id;
 
-	if (cpu_is_first_sibling_in_core(cpu_id)) {
+	if ((ret = cpu_is_first_sibling_in_core(cpu_id)) < 0) {
+		return ret;
+	} else if (ret != 0) {
 		my_thread_id = 0;
 		topo.num_cores++;
 	} else {
 		my_thread_id = 1;
 	}
 
-	init_counter(EVEN_COUNTERS, my_thread_id, my_core_id, my_package_id, cpu_id);
-	init_counter(ODD_COUNTERS, my_thread_id, my_core_id, my_package_id, cpu_id);
+	ret = init_counter(EVEN_COUNTERS, my_thread_id, my_core_id, my_package_id, cpu_id);
+	if (ret < 0)
+		return ret;
+	ret = init_counter(ODD_COUNTERS, my_thread_id, my_core_id, my_package_id, cpu_id);
+	if (ret < 0)
+		return ret;
 	return 0;
 }
 
-static void setup_all_buffers(void)
+#define DO_OR_GOTO_ERR(something) \
+do {                         \
+	ret = something;     \
+	if (ret < 0)         \
+		goto err;    \
+} while (0);
+
+static int setup_all_buffers(void)
 {
-	topology_probe();
-	allocate_counters(&thread_even, &core_even, &package_even);
-	allocate_counters(&thread_odd, &core_odd, &package_odd);
-	for_all_proc_cpus(initialize_counters);
+	int ret;
+
+	DO_OR_GOTO_ERR(topology_probe())
+	DO_OR_GOTO_ERR(allocate_counters(&thread_even, &core_even, &package_even))
+	DO_OR_GOTO_ERR(allocate_counters(&thread_odd, &core_odd, &package_odd))
+	DO_OR_GOTO_ERR(for_all_proc_cpus(initialize_counters))
+
+	allocated = true;
+	return 0;
+err:
+	free_all_buffers();
+	return ret;
 }
 
 static int turbostat_init(void)
 {
+	int ret;
 	struct timespec ts;
 
-	check_cpuid();
-
-	check_dev_msr();
-	check_super_user();
-
-	setup_all_buffers();
-
-	for_all_cpus(set_temperature_target, EVEN_COUNTERS);
+	DO_OR_GOTO_ERR(check_cpuid())
+	DO_OR_GOTO_ERR(check_dev_msr())
+	DO_OR_GOTO_ERR(check_super_user())
+	DO_OR_GOTO_ERR(setup_all_buffers())
+	DO_OR_GOTO_ERR(for_all_cpus(set_temperature_target, EVEN_COUNTERS))
 
 	ts.tv_sec = interval_sec;
 	ts.tv_nsec = 0;
@@ -1357,6 +1464,9 @@ static int turbostat_init(void)
 	plugin_register_complex_read(NULL, PLUGIN_NAME, turbostat_read, &ts, NULL);
 
 	return 0;
+err:
+	free_all_buffers();
+	return ret;
 }
 
 static const char *config_keys[] =
@@ -1374,6 +1484,7 @@ static int turbostat_config (const char *key, const char *value)
 	return 0;
 }
 
+void module_register (void);
 void module_register (void)
 {
 	plugin_register_init(PLUGIN_NAME, turbostat_init);
