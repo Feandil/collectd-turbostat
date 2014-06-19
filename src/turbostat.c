@@ -178,38 +178,39 @@ struct topo_params {
 struct timeval tv_even, tv_odd, tv_delta;
 
 enum return_values {
-	ERR_CPU_MIGRATE = -1,
-	ERR_MSR_IA32_APERF = -2,
-	ERR_MSR_IA32_MPERF = -3,
-	ERR_MSR_SMI_COUNT = -4,
-	ERR_MSR_CORE_C3_RESIDENCY = -5,
-	ERR_MSR_CORE_C6_RESIDENCY = -6,
-	ERR_MSR_CORE_C7_RESIDENCY = -7,
-	ERR_MSR_IA32_THERM_STATUS = -8,
-	ERR_MSR_PKG_C3_RESIDENCY = -9,
-	ERR_MSR_PKG_C6_RESIDENCY = -10,
-	ERR_MSR_PKG_C2_RESIDENCY = -11,
-	ERR_MSR_PKG_C7_RESIDENCY = -12,
-	ERR_MSR_PKG_C8_RESIDENCY = -13,
-	ERR_MSR_PKG_C9_RESIDENCY = -14,
-	ERR_MSR_PKG_C10_RESIDENCY = -15,
-	ERR_MSR_PKG_ENERGY_STATUS = -16,
-	ERR_MSR_PP0_ENERGY_STATUS = -17,
-	ERR_MSR_DRAM_ENERGY_STATUS = -18,
-	ERR_MSR_PP1_ENERGY_STATUS = -19,
-	ERR_MSR_PKG_PERF_STATUS = -20,
-	ERR_MSR_DRAM_PERF_STATUS = -21,
-	ERR_MSR_IA32_PACKAGE_THERM_STATUS = -22,
-	ERR_CPU_NOT_PRESENT = -23,
-	ERR_NO_MSR = -24,
-	ERR_CANT_OPEN_FILE = -25,
-	ERR_CANT_READ_NUMBER = -26,
-	ERR_CANT_READ_PROC_STAT = -27,
-	ERR_NO_INVARIANT_TSC = -28,
-	ERR_NO_APERF = -29,
-	ERR_CALLOC = -30,
-	ERR_CPU_ALLOC = -31,
-	ERR_NOT_ROOT = -32,
+	OK = 0,
+	ERR_CPU_MIGRATE,
+	ERR_MSR_IA32_APERF,
+	ERR_MSR_IA32_MPERF,
+	ERR_MSR_SMI_COUNT,
+	ERR_MSR_CORE_C3_RESIDENCY,
+	ERR_MSR_CORE_C6_RESIDENCY,
+	ERR_MSR_CORE_C7_RESIDENCY,
+	ERR_MSR_IA32_THERM_STATUS,
+	ERR_MSR_PKG_C3_RESIDENCY,
+	ERR_MSR_PKG_C6_RESIDENCY,
+	ERR_MSR_PKG_C2_RESIDENCY,
+	ERR_MSR_PKG_C7_RESIDENCY,
+	ERR_MSR_PKG_C8_RESIDENCY,
+	ERR_MSR_PKG_C9_RESIDENCY,
+	ERR_MSR_PKG_C10_RESIDENCY,
+	ERR_MSR_PKG_ENERGY_STATUS,
+	ERR_MSR_PP0_ENERGY_STATUS,
+	ERR_MSR_DRAM_ENERGY_STATUS,
+	ERR_MSR_PP1_ENERGY_STATUS,
+	ERR_MSR_PKG_PERF_STATUS,
+	ERR_MSR_DRAM_PERF_STATUS,
+	ERR_MSR_IA32_PACKAGE_THERM_STATUS,
+	ERR_CPU_NOT_PRESENT,
+	ERR_NO_MSR,
+	ERR_CANT_OPEN_FILE,
+	ERR_CANT_READ_NUMBER,
+	ERR_CANT_READ_PROC_STAT,
+	ERR_NO_INVARIANT_TSC,
+	ERR_NO_APERF,
+	ERR_CALLOC,
+	ERR_CPU_ALLOC,
+	ERR_NOT_ROOT,
 };
 
 #define STATIC_MUST_CHECK(function)          \
@@ -263,7 +264,7 @@ STATIC_MUST_CHECK(static int cpu_migrate(int cpu))
 	CPU_ZERO_S(cpu_affinity_setsize, cpu_affinity_set);
 	CPU_SET_S(cpu, cpu_affinity_setsize, cpu_affinity_set);
 	if (sched_setaffinity(0, cpu_affinity_setsize, cpu_affinity_set) == -1)
-		return ERR_CPU_MIGRATE;
+		return -ERR_CPU_MIGRATE;
 	else
 		return 0;
 }
@@ -434,21 +435,21 @@ STATIC_MUST_CHECK(static int get_counters(struct thread_data *t, struct core_dat
 
 	if (cpu_migrate(cpu)) {
 		WARNING("Could not migrate to CPU %d\n", cpu);
-		return ERR_CPU_MIGRATE;
+		return -ERR_CPU_MIGRATE;
 	}
 
 	t->tsc = rdtsc();	/* we are running on local CPU of interest */
 
 	if (has_aperf) {
 		if (get_msr(cpu, MSR_IA32_APERF, &t->aperf))
-			return ERR_MSR_IA32_APERF;
+			return -ERR_MSR_IA32_APERF;
 		if (get_msr(cpu, MSR_IA32_MPERF, &t->mperf))
-			return ERR_MSR_IA32_MPERF;
+			return -ERR_MSR_IA32_MPERF;
 	}
 
 	if (do_smi) {
 		if (get_msr(cpu, MSR_SMI_COUNT, &msr))
-			return ERR_MSR_SMI_COUNT;
+			return -ERR_MSR_SMI_COUNT;
 		t->smi_count = msr & 0xFFFFFFFF;
 	}
 
@@ -458,21 +459,21 @@ STATIC_MUST_CHECK(static int get_counters(struct thread_data *t, struct core_dat
 
 	if (do_nhm_cstates && !do_slm_cstates) {
 		if (get_msr(cpu, MSR_CORE_C3_RESIDENCY, &c->c3))
-			return ERR_MSR_CORE_C3_RESIDENCY;
+			return -ERR_MSR_CORE_C3_RESIDENCY;
 	}
 
 	if (do_nhm_cstates) {
 		if (get_msr(cpu, MSR_CORE_C6_RESIDENCY, &c->c6))
-			return ERR_MSR_CORE_C6_RESIDENCY;
+			return -ERR_MSR_CORE_C6_RESIDENCY;
 	}
 
 	if (do_snb_cstates)
 		if (get_msr(cpu, MSR_CORE_C7_RESIDENCY, &c->c7))
-			return ERR_MSR_CORE_C7_RESIDENCY;
+			return -ERR_MSR_CORE_C7_RESIDENCY;
 
 	if (do_dts) {
 		if (get_msr(cpu, MSR_IA32_THERM_STATUS, &msr))
-			return ERR_MSR_IA32_THERM_STATUS;
+			return -ERR_MSR_IA32_THERM_STATUS;
 		c->core_temp_c = tcc_activation_temp - ((msr >> 16) & 0x7F);
 	}
 
@@ -483,27 +484,27 @@ STATIC_MUST_CHECK(static int get_counters(struct thread_data *t, struct core_dat
 
 	if (do_nhm_cstates && !do_slm_cstates) {
 		if (get_msr(cpu, MSR_PKG_C3_RESIDENCY, &p->pc3))
-			return ERR_MSR_PKG_C3_RESIDENCY;
+			return -ERR_MSR_PKG_C3_RESIDENCY;
 		if (get_msr(cpu, MSR_PKG_C6_RESIDENCY, &p->pc6))
-			return ERR_MSR_PKG_C6_RESIDENCY;
+			return -ERR_MSR_PKG_C6_RESIDENCY;
 	}
 	if (do_snb_cstates) {
 		if (get_msr(cpu, MSR_PKG_C2_RESIDENCY, &p->pc2))
-			return ERR_MSR_PKG_C2_RESIDENCY;
+			return -ERR_MSR_PKG_C2_RESIDENCY;
 		if (get_msr(cpu, MSR_PKG_C7_RESIDENCY, &p->pc7))
-			return ERR_MSR_PKG_C7_RESIDENCY;
+			return -ERR_MSR_PKG_C7_RESIDENCY;
 	}
 	if (do_c8_c9_c10) {
 		if (get_msr(cpu, MSR_PKG_C8_RESIDENCY, &p->pc8))
-			return ERR_MSR_PKG_C8_RESIDENCY;
+			return -ERR_MSR_PKG_C8_RESIDENCY;
 		if (get_msr(cpu, MSR_PKG_C9_RESIDENCY, &p->pc9))
-			return ERR_MSR_PKG_C9_RESIDENCY;
+			return -ERR_MSR_PKG_C9_RESIDENCY;
 		if (get_msr(cpu, MSR_PKG_C10_RESIDENCY, &p->pc10))
-			return ERR_MSR_PKG_C10_RESIDENCY;
+			return -ERR_MSR_PKG_C10_RESIDENCY;
 	}
 	if (do_rapl & RAPL_PKG) {
 		if (get_msr(cpu, MSR_PKG_ENERGY_STATUS, &msr))
-			return ERR_MSR_PKG_ENERGY_STATUS;
+			return -ERR_MSR_PKG_ENERGY_STATUS;
 		p->energy_pkg = msr & 0xFFFFFFFF;
 	}
 	if (do_rapl & RAPL_CORES) {
@@ -513,27 +514,27 @@ STATIC_MUST_CHECK(static int get_counters(struct thread_data *t, struct core_dat
 	}
 	if (do_rapl & RAPL_DRAM) {
 		if (get_msr(cpu, MSR_DRAM_ENERGY_STATUS, &msr))
-			return ERR_MSR_DRAM_ENERGY_STATUS;
+			return -ERR_MSR_DRAM_ENERGY_STATUS;
 		p->energy_dram = msr & 0xFFFFFFFF;
 	}
 	if (do_rapl & RAPL_GFX) {
 		if (get_msr(cpu, MSR_PP1_ENERGY_STATUS, &msr))
-			return ERR_MSR_PP1_ENERGY_STATUS;
+			return -ERR_MSR_PP1_ENERGY_STATUS;
 		p->energy_gfx = msr & 0xFFFFFFFF;
 	}
 	if (do_rapl & RAPL_PKG_PERF_STATUS) {
 		if (get_msr(cpu, MSR_PKG_PERF_STATUS, &msr))
-			return ERR_MSR_PKG_PERF_STATUS;
+			return -ERR_MSR_PKG_PERF_STATUS;
 		p->rapl_pkg_perf_status = msr & 0xFFFFFFFF;
 	}
 	if (do_rapl & RAPL_DRAM_PERF_STATUS) {
 		if (get_msr(cpu, MSR_DRAM_PERF_STATUS, &msr))
-			return ERR_MSR_DRAM_PERF_STATUS;
+			return -ERR_MSR_DRAM_PERF_STATUS;
 		p->rapl_dram_perf_status = msr & 0xFFFFFFFF;
 	}
 	if (do_ptm) {
 		if (get_msr(cpu, MSR_IA32_PACKAGE_THERM_STATUS, &msr))
-			return ERR_MSR_IA32_PACKAGE_THERM_STATUS;
+			return -ERR_MSR_IA32_PACKAGE_THERM_STATUS;
 		p->pkg_temp_c = tcc_activation_temp - ((msr >> 16) & 0x7F);
 	}
 	return 0;
@@ -585,11 +586,11 @@ static int parse_int_file(const char *fmt, ...)
 	filep = fopen(path, "r");
 	if (!filep) {
 		ERROR("%s: open failed", path);
-		return ERR_CANT_OPEN_FILE;
+		return -ERR_CANT_OPEN_FILE;
 	}
 	if (fscanf(filep, "%d", &value) != 1) {
 		ERROR("%s: failed to parse number from file", path);
-		return ERR_CANT_READ_NUMBER;
+		return -ERR_CANT_READ_NUMBER;
 	}
 	fclose(filep);
 	return value;
@@ -635,7 +636,7 @@ static int get_num_ht_siblings(int cpu)
 	filep = fopen(path, "r");
         if (!filep) {
                 ERROR("%s: open failed", path);
-                return ERR_CANT_OPEN_FILE;
+                return -ERR_CANT_OPEN_FILE;
         }
 	/*
 	 * file format:
@@ -710,13 +711,13 @@ STATIC_MUST_CHECK(static int for_all_proc_cpus(int (func)(int)))
 	fp = fopen(proc_stat, "r");
         if (!fp) {
                 ERROR("%s: open failed", proc_stat);
-                return ERR_CANT_OPEN_FILE;
+                return -ERR_CANT_OPEN_FILE;
         }
 
 	retval = fscanf(fp, "cpu %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d\n");
 	if (retval != 0) {
 		ERROR("%s: failed to parse format", proc_stat);
-		return ERR_CANT_READ_PROC_STAT;
+		return -ERR_CANT_READ_PROC_STAT;
 	}
 
 	while (1) {
@@ -883,7 +884,7 @@ static int turbostat_read (user_data_t * not_used)
 		if ((ret = setup_all_buffers()) < 0)
 			return ret;
 		if (for_all_proc_cpus(cpu_is_not_present))
-			return ERR_CPU_NOT_PRESENT;
+			return -ERR_CPU_NOT_PRESENT;
 	}
 
 	if (!initialized) {
@@ -926,7 +927,7 @@ STATIC_MUST_CHECK(static int check_dev_msr())
 	if (stat("/dev/cpu/0/msr", &sb)) {
 		ERROR("no /dev/cpu/0/msr\n"
 			"Try \"# modprobe msr\"");
-		return ERR_NO_MSR;
+		return -ERR_NO_MSR;
 	}
 	return 0;
 }
@@ -935,7 +936,7 @@ STATIC_MUST_CHECK(static int check_super_user())
 {
 	if (getuid() != 0) {
 		ERROR("must be root");
-		return ERR_NOT_ROOT;
+		return -ERR_NOT_ROOT;
 	}
 	return 0;
 }
@@ -1100,7 +1101,7 @@ STATIC_MUST_CHECK(static int set_temperature_target(struct thread_data *t, struc
 	cpu = t->cpu_id;
 	if (cpu_migrate(cpu)) {
 		ERROR("Could not migrate to CPU %d\n", cpu);
-		return ERR_CPU_MIGRATE;
+		return -ERR_CPU_MIGRATE;
 	}
 
 	if (tcc_activation_temp_override != 0) {
@@ -1154,7 +1155,7 @@ STATIC_MUST_CHECK(static int check_cpuid())
 
 	if (!(edx & (1 << 5))) {
 		ERROR("CPUID: no MSR");
-		return ERR_NO_MSR;
+		return -ERR_NO_MSR;
 	}
 
 	/*
@@ -1167,7 +1168,7 @@ STATIC_MUST_CHECK(static int check_cpuid())
 
 	if (max_level < 0x80000007) {
 		ERROR("CPUID: no invariant TSC (max_level 0x%x)", max_level);
-		return ERR_NO_INVARIANT_TSC;
+		return -ERR_NO_INVARIANT_TSC;
 	}
 
 	/*
@@ -1179,7 +1180,7 @@ STATIC_MUST_CHECK(static int check_cpuid())
 
 	if (!has_invariant_tsc) {
 		ERROR("No invariant TSC");
-		return ERR_NO_INVARIANT_TSC;
+		return -ERR_NO_INVARIANT_TSC;
 	}
 
 	/*
@@ -1195,7 +1196,7 @@ STATIC_MUST_CHECK(static int check_cpuid())
 
 	if (!has_aperf) {
 		ERROR("No APERF");
-		return ERR_NO_APERF;
+		return -ERR_NO_APERF;
 	}
 
 	do_nehalem_platform_info = genuine_intel && has_invariant_tsc;
@@ -1238,7 +1239,7 @@ STATIC_MUST_CHECK(static int topology_probe())
 	cpus = calloc(1, (topo.max_cpu_num  + 1) * sizeof(struct cpu_topology));
 	if (cpus == NULL) {
 		ERROR("calloc cpus");
-		return ERR_CALLOC;
+		return -ERR_CALLOC;
 	}
 
 	/*
@@ -1248,7 +1249,7 @@ STATIC_MUST_CHECK(static int topology_probe())
 	if (cpu_present_set == NULL) {
 		free(cpus);
 		ERROR("CPU_ALLOC");
-		return ERR_CPU_ALLOC;
+		return -ERR_CPU_ALLOC;
 	}
 	cpu_present_setsize = CPU_ALLOC_SIZE((topo.max_cpu_num + 1));
 	CPU_ZERO_S(cpu_present_setsize, cpu_present_set);
@@ -1265,7 +1266,7 @@ STATIC_MUST_CHECK(static int topology_probe())
 	if (cpu_affinity_set == NULL) {
 		free(cpus);
 		ERROR("CPU_ALLOC");
-		return ERR_CPU_ALLOC;
+		return -ERR_CPU_ALLOC;
 	}
 	cpu_affinity_setsize = CPU_ALLOC_SIZE((topo.max_cpu_num + 1));
 	CPU_ZERO_S(cpu_affinity_setsize, cpu_affinity_set);
@@ -1354,7 +1355,7 @@ allocate_counters(struct thread_data **t, struct core_data **c, struct pkg_data 
 	return 0;
 error:
 	ERROR("calloc counters");
-	return ERR_CALLOC;
+	return -ERR_CALLOC;
 }
 /*
  * init_counter()
