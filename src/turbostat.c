@@ -103,8 +103,6 @@ static double rapl_joule_counter_range;
 					/* 0x642 MSR_PP1_POLICY */
 #define	TJMAX_DEFAULT	100
 
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
 int aperf_mperf_unstable;
 int backwards_count;
 char *progname;
