@@ -211,10 +211,7 @@ enum return_values {
 	ERR_NOT_ROOT,
 };
 
-#define STATIC_MUST_CHECK(function)          \
-function                                     \
-	__attribute__((warn_unused_result)); \
-function
+#define __must_check __attribute__((warn_unused_result))
 
 static int setup_all_buffers(void);
 
@@ -227,8 +224,9 @@ static int cpu_is_not_present(int cpu)
  * skip non-present cpus
  */
 
-STATIC_MUST_CHECK(static int for_all_cpus(int (func)(struct thread_data *, struct core_data *, struct pkg_data *),
-	struct thread_data *thread_base, struct core_data *core_base, struct pkg_data *pkg_base))
+static int __must_check
+for_all_cpus(int (func)(struct thread_data *, struct core_data *, struct pkg_data *),
+	struct thread_data *thread_base, struct core_data *core_base, struct pkg_data *pkg_base)
 {
 	int retval, pkg_no, core_no, thread_no;
 
@@ -257,7 +255,8 @@ STATIC_MUST_CHECK(static int for_all_cpus(int (func)(struct thread_data *, struc
 	return 0;
 }
 
-STATIC_MUST_CHECK(static int cpu_migrate(int cpu))
+static int __must_check
+cpu_migrate(int cpu)
 {
 	CPU_ZERO_S(cpu_affinity_setsize, cpu_affinity_set);
 	CPU_SET_S(cpu, cpu_affinity_setsize, cpu_affinity_set);
@@ -267,7 +266,8 @@ STATIC_MUST_CHECK(static int cpu_migrate(int cpu))
 		return 0;
 }
 
-STATIC_MUST_CHECK(static int get_msr(int cpu, off_t offset, unsigned long long *msr))
+static int __must_check
+get_msr(int cpu, off_t offset, unsigned long long *msr)
 {
 	ssize_t retval;
 	char pathname[32];
@@ -328,9 +328,9 @@ delta_core(struct core_data *new, struct core_data *old)
 /*
  * old = new - old
  */
-STATIC_MUST_CHECK(static int
+static int __must_check
 delta_thread(struct thread_data *new, struct thread_data *old,
-	struct core_data *core_delta))
+	struct core_data *core_delta)
 {
 	old->tsc = new->tsc - old->tsc;
 
@@ -389,9 +389,10 @@ delta_thread(struct thread_data *new, struct thread_data *old,
 	return 0;
 }
 
-STATIC_MUST_CHECK(static int delta_cpu(struct thread_data *t, struct core_data *c,
+static int __must_check
+delta_cpu(struct thread_data *t, struct core_data *c,
 	struct pkg_data *p, struct thread_data *t2,
-	struct core_data *c2, struct pkg_data *p2))
+	struct core_data *c2, struct pkg_data *p2)
 {
 	int ret;
 
@@ -426,7 +427,8 @@ static unsigned long long rdtsc(void)
  * migrate to cpu
  * acquire and record local counters for that cpu
  */
-STATIC_MUST_CHECK(static int get_counters(struct thread_data *t, struct core_data *c, struct pkg_data *p))
+static int __must_check
+get_counters(struct thread_data *t, struct core_data *c, struct pkg_data *p)
 {
 	int cpu = t->cpu_id;
 	unsigned long long msr;
@@ -656,13 +658,14 @@ static int get_num_ht_siblings(int cpu)
  * skip non-present cpus
  */
 
-STATIC_MUST_CHECK(
-static int for_all_cpus_2(int (func)(struct thread_data *, struct core_data *,
+
+static int __must_check
+for_all_cpus_2(int (func)(struct thread_data *, struct core_data *,
 	struct pkg_data *, struct thread_data *, struct core_data *,
 	struct pkg_data *), struct thread_data *thread_base,
 	struct core_data *core_base, struct pkg_data *pkg_base,
 	struct thread_data *thread_base2, struct core_data *core_base2,
-	struct pkg_data *pkg_base2))
+	struct pkg_data *pkg_base2)
 {
 	int retval, pkg_no, core_no, thread_no;
 
@@ -700,7 +703,8 @@ static int for_all_cpus_2(int (func)(struct thread_data *, struct core_data *,
  * run func(cpu) on every cpu in /proc/stat
  * return max_cpu number
  */
-STATIC_MUST_CHECK(static int for_all_proc_cpus(int (func)(int)))
+static int __must_check
+for_all_proc_cpus(int (func)(int))
 {
 	FILE *fp;
 	int cpu_num;
@@ -918,7 +922,8 @@ static int turbostat_read (user_data_t * not_used)
 	return 0;
 }
 
-STATIC_MUST_CHECK(static int check_dev_msr())
+static int __must_check
+check_dev_msr()
 {
 	struct stat sb;
 
@@ -930,7 +935,8 @@ STATIC_MUST_CHECK(static int check_dev_msr())
 	return 0;
 }
 
-STATIC_MUST_CHECK(static int check_super_user())
+static int __must_check
+check_super_user()
 {
 	if (getuid() != 0) {
 		ERROR("must be root");
@@ -1082,7 +1088,8 @@ static int is_slm(unsigned int family, unsigned int model)
  * below this value, including the Digital Thermal Sensor (DTS),
  * Package Thermal Management Sensor (PTM), and thermal event thresholds.
  */
-STATIC_MUST_CHECK(static int set_temperature_target(struct thread_data *t, struct core_data *c, struct pkg_data *p))
+static int __must_check
+set_temperature_target(struct thread_data *t, struct core_data *c, struct pkg_data *p)
 {
 	unsigned long long msr;
 	unsigned int target_c_local;
@@ -1133,7 +1140,8 @@ guess:
 	return 0;
 }
 
-STATIC_MUST_CHECK(static int check_cpuid())
+static int __must_check
+check_cpuid()
 {
 	unsigned int eax, ebx, ecx, edx, max_level;
 	unsigned int fms, family, model;
@@ -1212,7 +1220,8 @@ STATIC_MUST_CHECK(static int check_cpuid())
 
 
 
-STATIC_MUST_CHECK(static int topology_probe())
+static int __must_check
+topology_probe()
 {
 	int i;
 	int ret;
