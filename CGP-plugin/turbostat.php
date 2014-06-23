@@ -46,10 +46,11 @@ switch($obj->args['type']) {
 		$obj->rrd_format = '%5.1lf%s';
 	break;
 	case 'current':
-		$obj->data_sources = array('value');
-		$obj->rrd_title = 'SMI';
-		$obj->rrd_vertical = 'Nuumber';
-		$obj->rrd_format = '%5.0lf';
+		return;
+#		$obj->data_sources = array('value');
+#		$obj->rrd_title = 'SMI';
+#		$obj->rrd_vertical = 'Nuumber';
+#		$obj->rrd_format = '%5.0lf';
 	break;
 }
 
