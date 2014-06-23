@@ -27,11 +27,15 @@ switch($obj->args['type']) {
 			$obj->data_sources = array('value');
 		}
 		$obj->rrd_title = sprintf('C states (%s)', $obj->args['pinstance']);
-		$obj->rrd_vertical = '%';
+		$obj->rrd_vertical = 'Percent';
 		$obj->rrd_format = '%5.1lf';
 	break;
 	case 'power':
 		$obj->data_sources = array('value');
+		$obj->ds_names = array('Cor_W' => 'Cores',
+				       'GFX_W' => 'Graphics',
+				       'Pkg_W' => 'Package',
+				       'RAM_W' => 'DRAM');
 		$obj->rrd_title = sprintf('Power consumption (%s)', $obj->args['pinstance']);
 		$obj->rrd_vertical = 'W';
 		$obj->rrd_format = '%5.1lf%s';

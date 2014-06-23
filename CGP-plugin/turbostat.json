@@ -12,13 +12,27 @@
 	"percent": {
 		"type": "stacked",
 		"title": "C states ({{PI}})",
-		"vertical": "%",
+		"vertical": "Percent",
 		"legend_format": "%5.1lf"
 	},
 	"power": {
 		"title": "Power consumption ({{PI}})",
-		"vertical": "W",
-		"legend_format": "%5.1lf%s"
+		"vertical": "Watts",
+		"legend_format": "%5.1lf%s",
+		"legend": {
+			"Cor_W": {
+				"name": "Cores"
+			},
+			"GFX_W": {
+				"name": "Graphics"
+			},
+			"Pkg_W": {
+				"name": "Package"
+			},
+			"RAM_W": {
+				"name": "DRAM"
+			}
+		}
 	},
 	"temperature": {
 		"title": "Temperature",
