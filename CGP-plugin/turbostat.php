@@ -15,7 +15,6 @@ switch($obj->args['type']) {
 		} else {
 			$obj->data_sources = array('value');
 		}
-		$obj->ds_names = array('output' => 'Output');
 		$obj->rrd_title = 'Frequency';
 		$obj->rrd_vertical = 'GHz';
 		$obj->rrd_format = '%5.1lf%s';
@@ -27,14 +26,12 @@ switch($obj->args['type']) {
 		} else {
 			$obj->data_sources = array('value');
 		}
-		$obj->ds_names = 'State';
 		$obj->rrd_title = sprintf('C states (%s)', $obj->args['pinstance']);
 		$obj->rrd_vertical = '%';
 		$obj->rrd_format = '%5.1lf';
 	break;
 	case 'power':
 		$obj->data_sources = array('value');
-		$obj->ds_names = array('ups' => 'UPS');
 		$obj->rrd_title = sprintf('Power consumption (%s)', $obj->args['pinstance']);
 		$obj->rrd_vertical = 'W';
 		$obj->rrd_format = '%5.1lf%s';
