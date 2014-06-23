@@ -1,0 +1,28 @@
+{
+	"current": {
+		"title": "SMI",
+		"vertical": "Number",
+		"legend_format": "%5.0lf"
+	},
+	"frequency": {
+		"title": "Frequency",
+		"vertical": "GHz",
+		"legend_format": "%5.1lf%s"
+	},
+	"percent": {
+		"type": "stacked",
+		"title": "C states ({{PI}})",
+		"vertical": "%",
+		"legend_format": "%5.1lf"
+	},
+	"power": {
+		"title": "Power consumption ({{PI}})",
+		"vertical": "W",
+		"legend_format": "%5.1lf%s"
+	},
+	"temperature": {
+		"title": "Temperature",
+		"vertical": "°C",
+		"legend_format": "%5.1lf%s"
+	}
+}
