@@ -1,22 +1,22 @@
 {
 	"current": {
-		"title": "SMI",
+		"title": "SMI on {{HOST}}",
 		"vertical": "Number",
 		"legend_format": "%5.0lf"
 	},
 	"frequency": {
-		"title": "Frequency",
+		"title": "Frequency ({{PI}}) on {{HOST}}",
 		"vertical": "GHz",
 		"legend_format": "%5.1lf%s"
 	},
 	"percent": {
 		"type": "stacked",
-		"title": "C states ({{PI}})",
+		"title": "C states ({{PI}}) on {{HOST}}",
 		"vertical": "Percent",
 		"legend_format": "%5.1lf"
 	},
 	"power": {
-		"title": "Power consumption ({{PI}})",
+		"title": "Power consumption ({{PI}}) on {{HOST}}",
 		"vertical": "Watts",
 		"legend_format": "%5.1lf%s",
 		"legend": {
@@ -35,7 +35,7 @@
 		}
 	},
 	"temperature": {
-		"title": "Temperature",
+		"title": "Temperature on {{HOST}}",
 		"vertical": "°C",
 		"legend_format": "%5.1lf%s"
 	}
