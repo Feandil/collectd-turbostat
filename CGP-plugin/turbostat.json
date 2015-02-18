@@ -1,6 +1,5 @@
 {
 	"current": {
-		"type": "ignore",
 		"title": "SMI",
 		"vertical": "Number",
 		"legend_format": "%5.0lf"
