@@ -6,8 +6,13 @@
 	},
 	"frequency": {
 		"title": "Frequency ({{PI}}) on {{HOST}}",
-		"vertical": "GHz",
+		"vertical": "MHz",
 		"legend_format": "%5.1lf%s"
+	},
+	"gauge": {
+		"title": "Sanity check (TSC/s) on {{HOST}}",
+		"vertical": "MHz",
+		"legend_format": "%5.3lf%s"
 	},
 	"percent": {
 		"type": "stacked",
