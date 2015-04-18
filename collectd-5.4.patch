@@ -13,7 +13,7 @@ index 31d132f..1031940 100644
   - FreeBSD port of the ZFS-ARC plugin.
  
 diff --git a/README b/README
-index fa88f38..010a2a9 100644
+index c0d7036..3942f5b 100644
 --- a/README
 +++ b/README
 @@ -326,6 +326,10 @@ Features
@@ -28,10 +28,39 @@ index fa88f38..010a2a9 100644
        System uptime statistics.
  
 diff --git a/configure.ac b/configure.ac
-index f1c7b8a..f316155 100644
+index be5dc72..732c45c 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -4819,6 +4819,7 @@ plugin_tape="no"
+@@ -580,13 +580,28 @@ AC_CHECK_HEADERS(net/pfvar.h,
+ have_termios_h="no"
+ AC_CHECK_HEADERS(termios.h, [have_termios_h="yes"])
+ 
++# For the turbostat plugin
++have_asm_msrindex_h="no"
++AC_CHECK_HEADERS(asm/msr-index.h, [have_asm_msrindex_h="yes"])
++
++have_cpuid_h="no"
++AC_CHECK_HEADERS(cpuid.h, [have_cpuid_h="yes"])
++
++have_sched_h="no"
++AC_CHECK_HEADERS(cpuid.h, [have_sched_h="yes"])
++
++AC_CHECK_HEADERS(sys/capability.h)
+ #
+ # Checks for typedefs, structures, and compiler characteristics.
+ #
+ AC_C_CONST
++AC_C_INLINE
++AC_TYPE_OFF_T
+ AC_TYPE_PID_T
+ AC_TYPE_SIZE_T
++AC_TYPE_SSIZE_T
+ AC_TYPE_UID_T
++AC_TYPE_UINT32_T
+ AC_HEADER_TIME
+ 
+ #
+@@ -4856,6 +4871,7 @@ plugin_tape="no"
  plugin_tcpconns="no"
  plugin_ted="no"
  plugin_thermal="no"
@@ -39,15 +68,18 @@ index f1c7b8a..f316155 100644
  plugin_users="no"
  plugin_uptime="no"
  plugin_vmem="no"
-@@ -4851,6 +4852,7 @@ then
- 	plugin_swap="yes"
- 	plugin_tcpconns="yes"
- 	plugin_thermal="yes"
-+	plugin_turbostat="yes"
- 	plugin_uptime="yes"
- 	plugin_vmem="yes"
- 	plugin_vserver="yes"
-@@ -5213,6 +5215,7 @@ AC_PLUGIN([ted],         [$plugin_ted],        [Read The Energy Detective values
+@@ -4897,6 +4913,10 @@ then
+ 	then
+ 		plugin_ipvs="yes"
+ 	fi
++	if test "x$have_asm_msrindex_h" = "xyes" && test "x$have_cpuid_h" = "xyes" && test "x$have_sched_h" = "xyes"
++	then
++		plugin_turbostat="yes"
++	fi
+ fi
+ 
+ if test "x$ac_system" = "xOpenBSD"
+@@ -5250,6 +5270,7 @@ AC_PLUGIN([ted],         [$plugin_ted],        [Read The Energy Detective values
  AC_PLUGIN([thermal],     [$plugin_thermal],    [Linux ACPI thermal zone statistics])
  AC_PLUGIN([threshold],   [yes],                [Threshold checking plugin])
  AC_PLUGIN([tokyotyrant], [$with_libtokyotyrant],  [TokyoTyrant database statistics])
@@ -55,7 +87,7 @@ index f1c7b8a..f316155 100644
  AC_PLUGIN([unixsock],    [yes],                [Unixsock communication plugin])
  AC_PLUGIN([uptime],      [$plugin_uptime],     [Uptime statistics])
  AC_PLUGIN([users],       [$plugin_users],      [User statistics])
-@@ -5557,6 +5560,7 @@ Configuration:
+@@ -5594,6 +5615,7 @@ Configuration:
      thermal . . . . . . . $enable_thermal
      threshold . . . . . . $enable_threshold
      tokyotyrant . . . . . $enable_tokyotyrant
@@ -64,10 +96,10 @@ index f1c7b8a..f316155 100644
      uptime  . . . . . . . $enable_uptime
      users . . . . . . . . $enable_users
 diff --git a/src/Makefile.am b/src/Makefile.am
-index a9d8582..07b5667 100644
+index 405d4ae..087c982 100644
 --- a/src/Makefile.am
 +++ b/src/Makefile.am
-@@ -1264,6 +1264,14 @@ collectd_LDADD += "-dlopen" tokyotyrant.la
+@@ -1265,6 +1265,14 @@ collectd_LDADD += "-dlopen" tokyotyrant.la
  collectd_DEPENDENCIES += tokyotyrant.la
  endif
  
@@ -83,7 +115,7 @@ index a9d8582..07b5667 100644
  pkglib_LTLIBRARIES += unixsock.la
  unixsock_la_SOURCES = unixsock.c \
 diff --git a/src/collectd.conf.in b/src/collectd.conf.in
-index 7d9dab3..781add4 100644
+index 5088eae..4b15a01 100644
 --- a/src/collectd.conf.in
 +++ b/src/collectd.conf.in
 @@ -168,6 +168,7 @@
@@ -94,7 +126,7 @@ index 7d9dab3..781add4 100644
  #@BUILD_PLUGIN_UNIXSOCK_TRUE@LoadPlugin unixsock
  #@BUILD_PLUGIN_UPTIME_TRUE@LoadPlugin uptime
  #@BUILD_PLUGIN_USERS_TRUE@LoadPlugin users
-@@ -1079,6 +1080,25 @@
+@@ -1108,6 +1109,25 @@
  #	Port "1978"
  #</Plugin>
  
@@ -121,10 +153,10 @@ index 7d9dab3..781add4 100644
  #	SocketFile "@prefix@/var/run/@PACKAGE_NAME@-unixsock"
  #	SocketGroup "collectd"
 diff --git a/src/collectd.conf.pod b/src/collectd.conf.pod
-index a14a8f6..935c491 100644
+index 3c599eb..c8b50a8 100644
 --- a/src/collectd.conf.pod
 +++ b/src/collectd.conf.pod
-@@ -5933,6 +5933,79 @@ Default: B<1978>
+@@ -5879,6 +5879,79 @@ Default: B<1978>
  
  =back
  
@@ -206,10 +238,10 @@ index a14a8f6..935c491 100644
  =over 4
 diff --git a/src/turbostat.c b/src/turbostat.c
 new file mode 100644
-index 0000000..5ee4518
+index 0000000..c904f44
 --- /dev/null
 +++ b/src/turbostat.c
-@@ -0,0 +1,1628 @@
+@@ -0,0 +1,1612 @@
 +/*
 + * turbostat -- Log CPU frequency and C-state residency
 + * on modern Intel turbo-capable processors for collectd.
@@ -253,23 +285,11 @@ index 0000000..5ee4518
 +#include "utils_time.h"
 +
 +#include <asm/msr-index.h>
-+#include <stdarg.h>
-+#include <stdio.h>
-+#include <err.h>
-+#include <unistd.h>
-+#include <sys/types.h>
-+#include <sys/wait.h>
-+#include <sys/stat.h>
-+#include <sys/resource.h>
-+#include <fcntl.h>
-+#include <signal.h>
-+#include <stdlib.h>
-+#include <dirent.h>
-+#include <string.h>
-+#include <ctype.h>
-+#include <sched.h>
 +#include <cpuid.h>
++#include <sched.h>
++#ifdef HAVE_SYS_CAPABILITY_H
 +#include <sys/capability.h>
++#endif /* HAVE_SYS_CAPABILITY_H */
 +
 +#define PLUGIN_NAME "turbostat"
 +
@@ -396,10 +416,10 @@ index 0000000..5ee4518
 +	unsigned long long pc9;
 +	unsigned long long pc10;
 +	unsigned int package_id;
-+	unsigned int energy_pkg;	/* MSR_PKG_ENERGY_STATUS */
-+	unsigned int energy_dram;	/* MSR_DRAM_ENERGY_STATUS */
-+	unsigned int energy_cores;	/* MSR_PP0_ENERGY_STATUS */
-+	unsigned int energy_gfx;	/* MSR_PP1_ENERGY_STATUS */
++	uint32_t energy_pkg;	/* MSR_PKG_ENERGY_STATUS */
++	uint32_t energy_dram;	/* MSR_DRAM_ENERGY_STATUS */
++	uint32_t energy_cores;	/* MSR_PP0_ENERGY_STATUS */
++	uint32_t energy_gfx;	/* MSR_PP1_ENERGY_STATUS */
 +	unsigned int tcc_activation_temp;
 +	unsigned int pkg_temp_c;
 +} *package_delta, *package_even, *package_odd;
@@ -424,17 +444,17 @@ index 0000000..5ee4518
 +#define GET_PKG(pkg_base, pkg_no) (pkg_base + pkg_no)
 +
 +struct cpu_topology {
-+	int package_id;
-+	int core_id;
++	unsigned int package_id;
++	unsigned int core_id;
 +	_Bool first_core_in_package;
 +	_Bool first_thread_in_core;
 +};
 +
 +static struct topology {
-+	int max_cpu_id;
-+	int num_packages;
-+	int num_cores;
-+	int num_threads;
++	unsigned int max_cpu_id;
++	unsigned int num_packages;
++	unsigned int num_cores;
++	unsigned int num_threads;
 +	struct cpu_topology *cpus;
 +} topology;
 +
@@ -461,7 +481,7 @@ index 0000000..5ee4518
 + * Can change the scheduling affinity of the current process if multiple_read is 1
 + */
 +static int __attribute__((warn_unused_result))
-+open_msr(int cpu, _Bool multiple_read)
++open_msr(unsigned int cpu, _Bool multiple_read)
 +{
 +	char pathname[32];
 +	int fd;
@@ -513,8 +533,8 @@ index 0000000..5ee4518
 + * Open a MSR device for reading, read the value asked for and close it.
 + * This call will not affect the scheduling affinity of this thread.
 + */
-+static int __attribute__((warn_unused_result))
-+get_msr(int cpu, off_t offset, unsigned long long *msr)
++static ssize_t __attribute__((warn_unused_result))
++get_msr(unsigned int cpu, off_t offset, unsigned long long *msr)
 +{
 +	ssize_t retval;
 +	int fd;
@@ -543,7 +563,7 @@ index 0000000..5ee4518
 +static int __attribute__((warn_unused_result))
 +get_counters(struct thread_data *t, struct core_data *c, struct pkg_data *p)
 +{
-+	int cpu = t->cpu_id;
++	unsigned int cpu = t->cpu_id;
 +	unsigned long long msr;
 +	int msr_fd;
 +	int retval = 0;
@@ -642,16 +662,6 @@ index 0000000..5ee4518
 + **********************************/
 +
 +/*
-+ * Do delta = new - old on 32bits cyclique intergers
-+ */
-+#define DELTA_WRAP32(delta, new, old)			\
-+	if (new > old) {				\
-+		delta = new - old;			\
-+	} else {					\
-+		delta = 0x100000000 + new - old;	\
-+	}
-+
-+/*
 + * Extract the evolution old->new in delta at a package level
 + * (some are not new-delta, e.g. temperature)
 + */
@@ -667,10 +677,10 @@ index 0000000..5ee4518
 +	delta->pc10 = new->pc10 - old->pc10;
 +	delta->pkg_temp_c = new->pkg_temp_c;
 +
-+	DELTA_WRAP32(delta->energy_pkg, new->energy_pkg, old->energy_pkg);
-+	DELTA_WRAP32(delta->energy_cores, new->energy_cores, old->energy_cores);
-+	DELTA_WRAP32(delta->energy_gfx, new->energy_gfx, old->energy_gfx);
-+	DELTA_WRAP32(delta->energy_dram, new->energy_dram, old->energy_dram);
++	delta->energy_pkg = new->energy_pkg - old->energy_pkg;
++	delta->energy_cores = new->energy_cores - old->energy_cores;
++	delta->energy_gfx = new->energy_gfx - old->energy_gfx;
++	delta->energy_dram = new->energy_dram - old->energy_dram;
 +}
 +
 +/*
@@ -870,7 +880,7 @@ index 0000000..5ee4518
 + * Check if a given cpu id is in our compiled list of existing CPUs
 + */
 +static int
-+cpu_is_not_present(int cpu)
++cpu_is_not_present(unsigned int cpu)
 +{
 +	return !CPU_ISSET_S(cpu, cpu_present_setsize, cpu_present_set);
 +}
@@ -885,7 +895,8 @@ index 0000000..5ee4518
 +for_all_cpus(int (func)(struct thread_data *, struct core_data *, struct pkg_data *),
 +	struct thread_data *thread_base, struct core_data *core_base, struct pkg_data *pkg_base)
 +{
-+	int retval, pkg_no, core_no, thread_no;
++	int retval;
++	unsigned int pkg_no, core_no, thread_no;
 +
 +	for (pkg_no = 0; pkg_no < topology.num_packages; ++pkg_no) {
 +		for (core_no = 0; core_no < topology.num_cores; ++core_no) {
@@ -924,7 +935,8 @@ index 0000000..5ee4518
 +for_all_cpus_delta(const struct thread_data *thread_new_base, const struct core_data *core_new_base, const struct pkg_data *pkg_new_base,
 +		   const struct thread_data *thread_old_base, const struct core_data *core_old_base, const struct pkg_data *pkg_old_base)
 +{
-+	int retval, pkg_no, core_no, thread_no;
++	int retval;
++	unsigned int pkg_no, core_no, thread_no;
 +
 +	for (pkg_no = 0; pkg_no < topology.num_packages; ++pkg_no) {
 +		for (core_no = 0; core_no < topology.num_cores; ++core_no) {
@@ -1277,7 +1289,7 @@ index 0000000..5ee4518
 +}
 +
 +static int
-+get_threads_on_core(int cpu)
++get_threads_on_core(unsigned int cpu)
 +{
 +	char path[80];
 +	FILE *filep;
@@ -1311,10 +1323,10 @@ index 0000000..5ee4518
 + * return max_cpu number
 + */
 +static int __attribute__((warn_unused_result))
-+for_all_proc_cpus(int (func)(int))
++for_all_proc_cpus(int (func)(unsigned int))
 +{
 +	FILE *fp;
-+	int cpu_num;
++	unsigned int cpu_num;
 +	int retval;
 +
 +	fp = fopen("/proc/stat", "r");
@@ -1349,7 +1361,7 @@ index 0000000..5ee4518
 + * Update the stored topology.max_cpu_id
 + */
 +static int
-+update_max_cpu_id(int cpu)
++update_max_cpu_id(unsigned int cpu)
 +{
 +	if (topology.max_cpu_id < cpu)
 +		topology.max_cpu_id = cpu;
@@ -1357,7 +1369,7 @@ index 0000000..5ee4518
 +}
 +
 +static int
-+mark_cpu_present(int cpu)
++mark_cpu_present(unsigned int cpu)
 +{
 +	CPU_SET_S(cpu, cpu_present_setsize, cpu_present_set);
 +	return 0;
@@ -1381,10 +1393,10 @@ index 0000000..5ee4518
 +static int __attribute__((warn_unused_result))
 +topology_probe()
 +{
-+	int i;
++	unsigned int i;
 +	int ret;
-+	int max_package_id, max_core_id, max_thread_id;
-+	max_package_id = max_core_id = max_thread_id = 0;
++	unsigned int max_package_id, max_core_id, max_threads;
++	max_package_id = max_core_id = max_threads = 0;
 +
 +	/* Clean topology */
 +	free(topology.cpus);
@@ -1419,7 +1431,7 @@ index 0000000..5ee4518
 +	 * find max_core_id, max_package_id
 +	 */
 +	for (i = 0; i <= topology.max_cpu_id; ++i) {
-+		int num_threads;
++		unsigned int num_threads;
 +		struct cpu_topology *cpu = &topology.cpus[i];
 +
 +		if (cpu_is_not_present(i)) {
@@ -1431,7 +1443,7 @@ index 0000000..5ee4518
 +		if (ret < 0)
 +			goto err;
 +		else
-+			cpu->package_id = ret;
++			cpu->package_id = (unsigned int) ret;
 +		if (cpu->package_id > max_package_id)
 +			max_package_id = cpu->package_id;
 +
@@ -1439,26 +1451,26 @@ index 0000000..5ee4518
 +		if (ret < 0)
 +			goto err;
 +		else
-+			cpu->core_id = ret;
++			cpu->core_id = (unsigned int) ret;
 +		if (cpu->core_id > max_core_id)
 +			max_core_id = cpu->core_id;
 +		ret = parse_int_file("/sys/devices/system/cpu/cpu%d/topology/core_siblings_list", i);
 +		if (ret < 0)
 +			goto err;
-+		else if (ret == i)
++		else if ((unsigned int) ret == i)
 +			cpu->first_core_in_package = 1;
 +
 +		ret = get_threads_on_core(i);
 +		if (ret < 0)
 +			goto err;
 +		else
-+			num_threads = ret;
-+		if (num_threads > max_thread_id)
-+			max_thread_id = num_threads;
++			num_threads = (unsigned int) ret;
++		if (num_threads > max_threads)
++			max_threads = num_threads;
 +		ret = parse_int_file("/sys/devices/system/cpu/cpu%d/topology/thread_siblings_list", i);
 +		if (ret < 0)
 +			goto err;
-+		else if (ret == i)
++		else if ((unsigned int) ret == i)
 +			cpu->first_thread_in_core = 1;
 +
 +		DEBUG("Turbostat plugin: cpu %d pkg %d core %d\n",
@@ -1467,7 +1479,7 @@ index 0000000..5ee4518
 +	/* Num is max + 1 (need to count 0) */
 +	topology.num_packages = max_package_id + 1;
 +	topology.num_cores = max_core_id + 1;
-+	topology.num_threads = max_thread_id + 1;
++	topology.num_threads = max_threads;
 +
 +	return 0;
 +err:
@@ -1483,8 +1495,8 @@ index 0000000..5ee4518
 +static int
 +allocate_counters(struct thread_data **threads, struct core_data **cores, struct pkg_data **packages)
 +{
-+	int i;
-+	int total_threads, total_cores;
++	unsigned int i;
++	unsigned int total_threads, total_cores;
 +
 +	total_threads = topology.num_threads * topology.num_cores * topology.num_packages;
 +	*threads = calloc(total_threads, sizeof(struct thread_data));
@@ -1492,22 +1504,16 @@ index 0000000..5ee4518
 +		goto err;
 +
 +	for (i = 0; i < total_threads; ++i)
-+		(*threads)[i].cpu_id = -1;
++		(*threads)[i].cpu_id = topology.max_cpu_id + 1;
 +
 +	total_cores = topology.num_cores * topology.num_packages;
 +	*cores = calloc(total_cores, sizeof(struct core_data));
 +	if (*cores == NULL)
 +		goto err_clean_threads;
 +
-+	for (i = 0; i < total_cores; ++i)
-+		(*cores)[i].core_id = -1;
-+
 +	*packages = calloc(topology.num_packages, sizeof(struct pkg_data));
 +	if (*packages == NULL)
 +		goto err_clean_cores;
-+
-+	for (i = 0; i < topology.num_packages; i++)
-+		(*packages)[i].package_id = i;
 +
 +	return 0;
 +
@@ -1522,7 +1528,7 @@ index 0000000..5ee4518
 +
 +static void
 +init_counter(struct thread_data *thread_base, struct core_data *core_base,
-+	struct pkg_data *pkg_base, int cpu_id)
++	struct pkg_data *pkg_base, unsigned int cpu_id)
 +{
 +	struct thread_data *t;
 +	struct core_data *c;
@@ -1546,7 +1552,7 @@ index 0000000..5ee4518
 +static void
 +initialize_counters(void)
 +{
-+	int cpu_id;
++	unsigned int cpu_id;
 +
 +	for (cpu_id = 0; cpu_id <= topology.max_cpu_id; ++cpu_id) {
 +		if (cpu_is_not_present(cpu_id))
@@ -1704,15 +1710,24 @@ index 0000000..5ee4518
 +static int
 +check_permissions(void)
 +{
++#ifdef HAVE_SYS_CAPABILITY_H
 +	struct __user_cap_header_struct cap_header_data;
 +	cap_user_header_t cap_header = &cap_header_data;
 +	struct __user_cap_data_struct cap_data_data;
 +	cap_user_data_t cap_data = &cap_data_data;
 +	int ret = 0;
++#endif /* HAVE_SYS_CAPABILITY_H */
 +
 +	if (getuid() == 0) {
 +		/* We have everything we need */
 +		return 0;
++#ifndef HAVE_SYS_CAPABILITY_H
++	} else {
++		ERROR("Turbostat plugin: Initialization failed: this plugin "
++		      "requires collectd to run as root");
++		return -1;
++	}
++#else /* HAVE_SYS_CAPABILITY_H */
 +	}
 +
 +	/* check for CAP_SYS_RAWIO */
@@ -1745,6 +1760,7 @@ index 0000000..5ee4518
 +		      "collectd a special capability (CAP_SYS_RAWIO) and read "
 +                      "access to /dev/cpu/*/msr (see previous warnings)");
 +	return ret;
++#endif /* HAVE_SYS_CAPABILITY_H */
 +}
 +
 +static int
